@@ -3,7 +3,7 @@
 const path = require("path");
 
 module.exports = {
-    retriveSchedule: "1 0 * * *",
+    retriveSchedule: "*/15 * * * * *",
     syncLastCommitSchedule: "*/5 * * * * *",
     storagePath: process.env["STORAGE_PATH"] || path.join(__dirname, "Storage"),
     server: {
