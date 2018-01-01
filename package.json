@@ -4,6 +4,7 @@
   "description": "",
   "main": "index.js",
   "dependencies": {
+    "@tilliwilli/izida-common": "1.0.0",
     "node-cron": "1.2.1"
   },
   "devDependencies": {},
