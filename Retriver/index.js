@@ -23,6 +23,7 @@ module.exports = class Retriver extends Base
         let self = this;
         return super.Initialize()
             .then(() => self._ActionInitLSCFile())
+            .then(() => self._ActionCreateBundleDirectory())
             .then(() => self)
             ;
     }
@@ -193,6 +194,17 @@ module.exports = class Retriver extends Base
             fs.exists(lscFile, exists => {
                 if(exists) return RESOLVE();
                 else return fs.writeFile(lscFile, self.config.rootCommit, error => error?REJECT(error):RESOLVE());
+            });
+        });
+    }
+
+    _ActionCreateBundleDirectory(){
+        let self = this;
+        return new Promise((RESOLVE, REJECT) => {
+            const bundlePath = `${self.config.storagePath}/Bundle`;
+            fs.exists(bundlePath, exists => {
+                if(exists) return RESOLVE();
+                else return fs.mkdir(bundlePath, error => error?REJECT(error):RESOLVE());
             });
         });
     }
