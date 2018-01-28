@@ -1,1 +1,1 @@
-set SERVER_IP=212.12.28.107&&set SERVER_PORT=10003&&node index.js
+set SERVER_IP=212.12.28.107&&set SERVER_PORT=10003&&pm2 start index.js --name eavesdropper-client
