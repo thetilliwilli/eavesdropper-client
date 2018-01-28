@@ -1,2 +1,3 @@
 /node_modules
-/Storage
+/Storage/Bundle
+/Storage/lastSyncCommit.txt

@@ -3,6 +3,7 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const cp = require("child_process");
 
 const cron = require("node-cron");
 
@@ -18,9 +19,20 @@ module.exports = class Retriver extends Base
         this._RetriveJob = this._RetriveJob.bind(this);
     }
 
+    Initialize(){
+        let self = this;
+        return super.Initialize()
+            // .then(() => self._ActionInitGitRepo())
+            .then(() => self._ActionInitLSCFile())
+            .then(() => self)
+            ;
+    }
+
     StartServer(){
         cron.schedule(this.config.syncLastCommitSchedule, this._SyncLastCommitJob);
         cron.schedule(this.config.retriveSchedule, this._RetriveJob);
+        this._SyncLastCommitJob();
+        // this._RetriveJob();
     }
 
     //JOBS
@@ -83,8 +95,10 @@ module.exports = class Retriver extends Base
                 }
             };
             var req = http.request(options, res => {
-                res.on("end", () => RESOLVE());
+                let rawData = "";
+                res.on("end", () => JSON.parse(rawData)==="ok"?RESOLVE():REJECT(rawData));
                 res.on("error", error => REJECT(error));
+                res.on("data", chunk => rawData+=chunk);
             });
             req.on("error", error => REJECT(error));
             req.write(postData);
@@ -102,6 +116,25 @@ module.exports = class Retriver extends Base
                 res.pipe(fileStream);
                 res.on("error", error => REJECT(error));
             }).on("error", error => REJECT(error));
+        });
+    }
+
+    // _ActionInitGitRepo(){
+    //     let self = this;
+    //     return new Promise((RESOLVE, REJECT) => {
+    //         const gitRepoPath = `${self.config.storagePath}/Git`;
+    //         cp.exec(`cd ${gitRepoPath} && git init`, error => error?REJECT(error):RESOLVE());
+    //     });
+    // }
+    
+    _ActionInitLSCFile(){
+        let self = this;
+        return new Promise((RESOLVE, REJECT) => {
+            const lscFile = `${self.config.storagePath}/lastSyncCommit.txt`;
+            fs.exists(lscFile, exists => {
+                if(exists) return RESOLVE();
+                else return fs.writeFile(lscFile, self.config.rootCommit, error => error?REJECT(error):RESOLVE());
+            });
         });
     }
 }
