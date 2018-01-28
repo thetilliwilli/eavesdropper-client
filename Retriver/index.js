@@ -22,7 +22,6 @@ module.exports = class Retriver extends Base
     Initialize(){
         let self = this;
         return super.Initialize()
-            // .then(() => self._ActionInitGitRepo())
             .then(() => self._ActionInitLSCFile())
             .then(() => self)
             ;
@@ -31,12 +30,13 @@ module.exports = class Retriver extends Base
     StartServer(){
         cron.schedule(this.config.syncLastCommitSchedule, this._SyncLastCommitJob);
         cron.schedule(this.config.retriveSchedule, this._RetriveJob);
-        this._SyncLastCommitJob();
-        // this._RetriveJob();
+        Promise.resolve()
+            .then(this._SyncLastCommitJob())
+            .then(this._RetriveJob())
+            ;
     }
 
     //JOBS
-
     _SyncLastCommitJob(){
         let self = this;
         return Promise.resolve()
@@ -55,10 +55,20 @@ module.exports = class Retriver extends Base
 
     _RetriveJob(){
         let self = this;
+        console.log(`[RetriveJob.Start]: ${util.Now()}`);
         return Promise.resolve()
-            .then(() => self._ActionDownloadArchive())
-            // .then(() => self._ActionDownloadBundle())
-            .then(msg => console.log(`RetriveJob: done`))
+            .then(() => self._IsRemoteHasNewCommits())
+            .then(hasNews => {
+                if(hasNews) return Promise.resolve()
+                    .then(() => self._ActionDownloadBundle())
+                    .then(() => console.log("[.DownloadBundle]: end"))
+                    .then(() => self._ActionFetchBundle())
+                    .then(() => self._ActionUpdateLSC())
+                    .then(() => self._SyncLastCommitJob())
+                    ;
+                else return Promise.resolve();
+            })
+            .then(msg => console.log(`[RetriveJob.Done]: ${util.Now()}`))
             .catch(util.LogAndRethrow)
             ;
     }
@@ -106,27 +116,76 @@ module.exports = class Retriver extends Base
         });
     }
 
-    _ActionDownloadArchive(){
+    _IsRemoteHasNewCommits(){
+        let self = this;
+
+        function FetchRemoteInformation(RESOLVE, REJECT){
+            const url = `http://${self.config.ip}:${self.config.port}/`;
+            var req = http.get(url, res => {
+                let data = "";
+                res.on("error", error=>REJECT(error));
+                res.on("end", ()=>RESOLVE(JSON.parse(data)))
+                res.on("data", chunk=>data+=chunk);
+            }).on("error", error => REJECT(error));
+        };
+
+        return Promise.resolve()
+            .then(() => new Promise(FetchRemoteInformation))
+            .then(info => info.lastSyncCommit !== info.lastestCommit)
+            ;
+    }
+
+    _ActionDownloadBundle(){
         let self = this;
         return new Promise((RESOLVE, REJECT) => {
-            const url = `http://${self.config.ip}:${self.config.port}/downloadArchive`;
+            const url = `http://${self.config.ip}:${self.config.port}/downloadBundle`;
             var req = http.get(url, res => {
-                const absFilePath = path.join(self.config.storagePath, "Bundle", "db.archive");
+                const absFilePath = path.join(self.config.storagePath, "Bundle", "repo.bundle");
                 var fileStream = fs.createWriteStream(absFilePath);
                 res.pipe(fileStream);
                 res.on("error", error => REJECT(error));
+                fileStream.on("error", error => REJECT(error));
+                res.on("end", () => RESOLVE());
             }).on("error", error => REJECT(error));
         });
     }
 
-    // _ActionInitGitRepo(){
-    //     let self = this;
-    //     return new Promise((RESOLVE, REJECT) => {
-    //         const gitRepoPath = `${self.config.storagePath}/Git`;
-    //         cp.exec(`cd ${gitRepoPath} && git init`, error => error?REJECT(error):RESOLVE());
-    //     });
-    // }
-    
+    _ActionFetchBundle(){
+        let self = this;
+        return new Promise((RESOLVE, REJECT) => {
+            const bundleFile = path.join(self.config.storagePath, "Bundle", "repo.bundle");
+            const cmd = `git --git-dir="${self.config.storagePath}/Git" fetch "${bundleFile}" master:master`;
+            console.log(cmd);
+            cp.exec(cmd, (error, stdout, stderr) => {
+                if(error) return REJECT(error);
+                else return RESOLVE();
+            });
+        });
+    }
+
+    _ActionUpdateLSC(){
+        let self = this;
+        
+        function GetLastCommitResolver(RESOLVE, REJECT){
+            const cmd = `git --git-dir="${self.config.storagePath}/Git" log --pretty=format:%H`;
+            cp.exec(cmd, (error, stdout)=>{
+                if(error) return REJECT(error);
+                else return RESOLVE(stdout.slice(0, stdout.indexOf("\n")).trim());
+            });
+        };
+
+        function SaveCommitHashToFile(hash){
+            return new Promise((RESOLVE, REJECT)=>{
+                fs.writeFile(`${self.config.storagePath}/lastSyncCommit.txt`, hash,error=>error?REJECT(error):RESOLVE(hash));
+            });
+        }
+
+        return Promise.resolve()
+            .then(() => new Promise(GetLastCommitResolver))
+            .then(hash => SaveCommitHashToFile(hash))
+            ;
+    }
+
     _ActionInitLSCFile(){
         let self = this;
         return new Promise((RESOLVE, REJECT) => {
